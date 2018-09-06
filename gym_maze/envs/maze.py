@@ -55,7 +55,7 @@ class MazeEnv(gym.Env):
             self.all_actions = list(range(self.action_space.n))
         elif action_type == 'Continuous':
             self.num_actions = 2
-            self.action_space = spaces.Box(low=-1., high=1., shape=(2,))
+            self.action_space = spaces.Box(low=-1., high=1., shape=(2,), dtype=np.float32)
             self.all_actions = [[-1, -1], [-1, 0], [-1, 1],
 								[0, -1], [0, 1],
 								[1, -1], [1, 0], [1, 1]]
@@ -77,6 +77,11 @@ class MazeEnv(gym.Env):
             self.observation_space = spaces.Box(low=low_obs, 
                                                 high=high_obs,
                                                 shape=(self.pob_size*2+1, self.pob_size*2+1), 
+                                                dtype=np.float32)
+        elif self.obs_type == 'distance':
+            self.observation_space = spaces.Box(low=0.,
+                                                high=20.,
+                                                shape=(1),
                                                 dtype=np.float32)
         else:
             raise TypeError('Observation type must be either \'full\' or \'partial\'')
@@ -197,7 +202,7 @@ class MazeEnv(gym.Env):
             move = transitions[action]
         elif self.action_type == 'Continuous':
             move = action
-        
+
         new_state = [state[0] + move[0], state[1] + move[1]]
         if self.maze[int(new_state[0])][int(new_state[1])] == 1:  # Hit wall, stay there
             return state
@@ -209,6 +214,8 @@ class MazeEnv(gym.Env):
             return self._get_full_obs()
         elif self.obs_type == 'partial':
             return self._get_partial_obs(self.pob_size)
+        elif self.obs_type == 'distance':
+            return self._get_distance_obs()
 
     def _get_full_obs(self):
         """Return a 2D array representation of maze."""
@@ -222,7 +229,12 @@ class MazeEnv(gym.Env):
         obs[int(self.state[0])][int(self.state[1])] = 2  # 2: agent
         
         return obs
-    
+
+    def _get_distance_obs(self):
+        # intersect ray with closest wall
+        maze = self._get_full_obs()
+        return [0.]
+
     def _get_partial_obs(self, size=1):
         """Get partial observable window according to Moore neighborhood"""
         # Get maze with indicated location of current position and goal positions
