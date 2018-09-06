@@ -8,6 +8,9 @@ import gym
 from gym import spaces
 from gym.utils import seeding
 
+def discretize(state):
+    return [int(state[0]), int(state[1])]
+
 
 class MazeEnv(gym.Env):
     """Configurable environment for maze. """
@@ -44,12 +47,20 @@ class MazeEnv(gym.Env):
         # Action space: 0: Up, 1: Down, 2: Left, 3: Right
         if self.action_type == 'VonNeumann':  # Von Neumann neighborhood
             self.num_actions = 4
+            self.action_space = spaces.Discrete(self.num_actions)
+            self.all_actions = list(range(self.action_space.n))
         elif action_type == 'Moore':  # Moore neighborhood
             self.num_actions = 8
+            self.action_space = spaces.Discrete(self.num_actions)
+            self.all_actions = list(range(self.action_space.n))
+        elif action_type == 'Continuous':
+            self.num_actions = 2
+            self.action_space = spaces.Box(low=-1., high=1., shape=(2,))
+            self.all_actions = [[-1, -1], [-1, 0], [-1, 1],
+								[0, -1], [0, 1],
+								[1, -1], [1, 0], [1, 1]]
         else:
-            raise TypeError('Action type must be either \'VonNeumann\' or \'Moore\'')
-        self.action_space = spaces.Discrete(self.num_actions)
-        self.all_actions = list(range(self.action_space.n))
+            raise TypeError('Action type must be either \'VonNeumann\' or \'Moore\' or \'Continuous\'')
 
         # Size of the partial observable window
         self.pob_size = pob_size
@@ -84,9 +95,9 @@ class MazeEnv(gym.Env):
         self.state = self._next_state(self.state, action)
         
         # Footprint: Record agent trajectory
-        self.traces.append(self.state)
+        self.traces.append(discretize(self.state))
         
-        if self._goal_test(self.state):  # Goal check
+        if self._goal_test(discretize(self.state)):  # Goal check
             reward = +1
             done = True
         elif self.state == old_state:  # Hit wall
@@ -179,12 +190,16 @@ class MazeEnv(gym.Env):
         # Transition table to define movement for each action
         if self.action_type == 'VonNeumann':
             transitions = {0: [-1, 0], 1: [+1, 0], 2: [0, -1], 3: [0, +1]}
+            move = transitions[action]
         elif self.action_type == 'Moore':
             transitions = {0: [-1, 0], 1: [+1, 0], 2: [0, -1], 3: [0, +1], 
                            4: [-1, +1], 5: [+1, +1], 6: [-1, -1], 7: [+1, -1]}
+            move = transitions[action]
+        elif self.action_type == 'Continuous':
+            move = action
         
-        new_state = [state[0] + transitions[action][0], state[1] + transitions[action][1]]
-        if self.maze[new_state[0]][new_state[1]] == 1:  # Hit wall, stay there
+        new_state = [state[0] + move[0], state[1] + move[1]]
+        if self.maze[int(new_state[0])][int(new_state[1])] == 1:  # Hit wall, stay there
             return state
         else:  # Valid move for 0, 2, 3, 4
             return new_state
@@ -204,7 +219,7 @@ class MazeEnv(gym.Env):
         
         # Set current position
         # Come after painting goal positions, avoid invisible within multi-goal regions
-        obs[self.state[0]][self.state[1]] = 2  # 2: agent
+        obs[int(self.state[0])][int(self.state[1])] = 2  # 2: agent
         
         return obs
     
@@ -212,7 +227,7 @@ class MazeEnv(gym.Env):
         """Get partial observable window according to Moore neighborhood"""
         # Get maze with indicated location of current position and goal positions
         maze = self._get_full_obs()
-        pos = np.array(self.state)
+        pos = np.array(self.state).astype(int)
 
         under_offset = np.min(pos - size)
         over_offset = np.min(len(maze) - (pos + size + 1))
