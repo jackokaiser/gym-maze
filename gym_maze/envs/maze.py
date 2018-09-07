@@ -54,11 +54,12 @@ class MazeEnv(gym.Env):
             self.action_space = spaces.Discrete(self.num_actions)
             self.all_actions = list(range(self.action_space.n))
         elif action_type == 'Continuous':
+            self.init_state.append(0.) # orientation
             self.num_actions = 2
             self.action_space = spaces.Box(low=-1., high=1., shape=(2,), dtype=np.float32)
             self.all_actions = [[-1, -1], [-1, 0], [-1, 1],
-                                                                [0, -1], [0, 1],
-                                                                [1, -1], [1, 0], [1, 1]]
+                                [0, -1], [0, 1],
+                                [1, -1], [1, 0], [1, 1]]
         else:
             raise TypeError('Action type must be either \'VonNeumann\' or \'Moore\' or \'Continuous\'')
 
@@ -100,9 +101,9 @@ class MazeEnv(gym.Env):
         self.state = self._next_state(self.state, action)
 
         # Footprint: Record agent trajectory
-        self.traces.append(discretize(self.state))
+        self.traces.append(discretize(self.state[0:2]))
 
-        if self._goal_test(discretize(self.state)):  # Goal check
+        if self._goal_test(discretize(self.state[0:2])):  # Goal check
             reward = +1
             done = True
         elif self.state == old_state:  # Hit wall
@@ -196,14 +197,28 @@ class MazeEnv(gym.Env):
         if self.action_type == 'VonNeumann':
             transitions = {0: [-1, 0], 1: [+1, 0], 2: [0, -1], 3: [0, +1]}
             move = transitions[action]
+            new_state = [state[0] + move[0], state[1] + move[1]]
+
         elif self.action_type == 'Moore':
             transitions = {0: [-1, 0], 1: [+1, 0], 2: [0, -1], 3: [0, +1],
                            4: [-1, +1], 5: [+1, +1], 6: [-1, -1], 7: [+1, -1]}
             move = transitions[action]
-        elif self.action_type == 'Continuous':
-            move = action
+            new_state = [state[0] + move[0], state[1] + move[1]]
 
-        new_state = [state[0] + move[0], state[1] + move[1]]
+        elif self.action_type == 'Continuous':
+            # differential drive with approximately pushbot dimension
+            delta_t = 0.03
+            wheel_radius = 0.02
+            robot_width = 0.05
+            forward = action[0] + action[1]
+            angle = action[0] - action[1]
+            move = [
+                delta_t * wheel_radius * 0.5 * forward * np.cos(self.state[2]),
+                delta_t * wheel_radius * 0.5 * forward * np.sin(self.state[2]),
+                delta_t * (wheel_radius / robot_width) * angle
+            ]
+            new_state = [state[0] + move[0], state[1] + move[1], state[2] + move[2]]
+
         if self.maze[int(new_state[0])][int(new_state[1])] == 1:  # Hit wall, stay there
             return state
         else:  # Valid move for 0, 2, 3, 4
@@ -226,7 +241,13 @@ class MazeEnv(gym.Env):
 
         # Set current position
         # Come after painting goal positions, avoid invisible within multi-goal regions
-        obs[int(self.state[0])][int(self.state[1])] = 2  # 2: agent
+        pos = np.array(self.state[0:2], dtype=int)
+        obs[pos[0],pos[1]] = 2  # 2: agent
+        if len(self.state) > 2:
+            # draw the cell in front of the agent
+            front = np.array((np.cos(self.state[2]), np.sin(self.state[2])))
+            front = (pos + 1.3 * front).astype(int)
+            obs[front[0],front[1]] = 4  # 4: food
 
         return obs
 
@@ -239,7 +260,7 @@ class MazeEnv(gym.Env):
         """Get partial observable window according to Moore neighborhood"""
         # Get maze with indicated location of current position and goal positions
         maze = self._get_full_obs()
-        pos = np.array(self.state).astype(int)
+        pos = np.array(self.state[0:2]).astype(int)
 
         under_offset = np.min(pos - size)
         over_offset = np.min(len(maze) - (pos + size + 1))
