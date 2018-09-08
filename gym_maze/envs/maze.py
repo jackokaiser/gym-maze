@@ -53,10 +53,10 @@ class MazeEnv(gym.Env):
             self.num_actions = 8
             self.action_space = spaces.Discrete(self.num_actions)
             self.all_actions = list(range(self.action_space.n))
-        elif action_type == 'Continuous':
+        elif action_type.startswith('Continuous'):
             self.init_state.append(0.) # orientation
             self.num_actions = 2
-            self.action_space = spaces.Box(low=-1., high=1., shape=(2,), dtype=np.float32)
+            self.action_space = spaces.Box(low=-1., high=1., shape=(2,))
             self.all_actions = [[-1, -1], [-1, 0], [-1, 1],
                                 [0, -1], [0, 1],
                                 [1, -1], [1, 0], [1, 1]]
@@ -72,18 +72,15 @@ class MazeEnv(gym.Env):
         if self.obs_type == 'full':
             self.observation_space = spaces.Box(low=low_obs,
                                                 high=high_obs,
-                                                shape=self.maze_size,
-                                                dtype=np.float32)
+                                                shape=self.maze_size)
         elif self.obs_type == 'partial':
             self.observation_space = spaces.Box(low=low_obs,
                                                 high=high_obs,
-                                                shape=(self.pob_size*2+1, self.pob_size*2+1),
-                                                dtype=np.float32)
+                                                shape=(self.pob_size*2+1, self.pob_size*2+1))
         elif self.obs_type == 'distance':
             self.observation_space = spaces.Box(low=0.,
                                                 high=20.,
-                                                shape=(1),
-                                                dtype=np.float32)
+                                                shape=(1))
         else:
             raise TypeError('Observation type must be either \'full\' or \'partial\'')
 
@@ -104,7 +101,7 @@ class MazeEnv(gym.Env):
         self.traces.append(discretize(self.state[0:2]))
 
         if self._goal_test(discretize(self.state[0:2])):  # Goal check
-            reward = +1
+            reward = +100
             done = True
         elif self.state == old_state:  # Hit wall
             reward = -1
@@ -206,22 +203,33 @@ class MazeEnv(gym.Env):
             new_state = [state[0] + move[0], state[1] + move[1]]
 
         elif self.action_type == 'Continuous':
+            # action is speed/angle
+            move = [
+                action[0] * np.cos(self.state[2]),
+                action[0] * np.sin(self.state[2]),
+                action[1] * 0.1
+            ]
+            new_state = [state[0] + move[0], state[1] + move[1], state[2] + move[2]]
+
+        elif self.action_type == 'Continuous-diff':
             # differential drive with approximately pushbot dimension
+            gridworld_scale = 2000. # distance between adjacent pixels
             delta_t = 0.03
             wheel_radius = 0.02
             robot_width = 0.05
             forward = action[0] + action[1]
             angle = action[0] - action[1]
             move = [
-                delta_t * wheel_radius * 0.5 * forward * np.cos(self.state[2]),
-                delta_t * wheel_radius * 0.5 * forward * np.sin(self.state[2]),
+                gridworld_scale * delta_t * wheel_radius * 0.5 * forward * np.cos(self.state[2]),
+                gridworld_scale * delta_t * wheel_radius * 0.5 * forward * np.sin(self.state[2]),
                 delta_t * (wheel_radius / robot_width) * angle
             ]
             new_state = [state[0] + move[0], state[1] + move[1], state[2] + move[2]]
 
-        if self.maze[int(new_state[0])][int(new_state[1])] == 1:  # Hit wall, stay there
+
+        if (not 0 <= int(new_state[0]) < self.maze.shape[0]) or (not 0 <= int(new_state[1]) < self.maze.shape[1]) or (self.maze[int(new_state[0])][int(new_state[1])] == 1):  # Hit wall, stay there
             return state
-        else:  # Valid move for 0, 2, 3, 4
+        else:
             return new_state
 
     def _get_obs(self):
