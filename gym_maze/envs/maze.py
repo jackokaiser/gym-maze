@@ -81,6 +81,11 @@ class MazeEnv(gym.Env):
             self.observation_space = spaces.Box(low=0.,
                                                 high=20.,
                                                 shape=(1))
+        elif self.obs_type == 'state':
+            self.observation_space = spaces.Box(low=0.,
+                                                high=1.,
+                                                shape=(3))
+
         else:
             raise TypeError('Observation type must be either \'full\' or \'partial\'')
 
@@ -101,9 +106,9 @@ class MazeEnv(gym.Env):
         self.traces.append(discretize(self.state[0:2]))
 
         if self._goal_test(discretize(self.state[0:2])):  # Goal check
-            reward = +100
+            reward = +10
             done = True
-        elif self.state == old_state:  # Hit wall
+        elif self.state[:2] == old_state[:2]:  # Hit wall
             reward = -1
             done = False
         else:  # Moved, small negative reward to encourage shorest path
@@ -228,6 +233,9 @@ class MazeEnv(gym.Env):
 
 
         if (not 0 <= int(new_state[0]) < self.maze.shape[0]) or (not 0 <= int(new_state[1]) < self.maze.shape[1]) or (self.maze[int(new_state[0])][int(new_state[1])] == 1):  # Hit wall, stay there
+            if len(state) > 2:
+                # apply rotation still
+                state[2] = new_state[2]
             return state
         else:
             return new_state
@@ -239,6 +247,8 @@ class MazeEnv(gym.Env):
             return self._get_partial_obs(self.pob_size)
         elif self.obs_type == 'distance':
             return self._get_distance_obs()
+        elif self.obs_type == 'state':
+            return self._get_state_obs()
 
     def _get_full_obs(self):
         """Return a 2D array representation of maze."""
@@ -250,14 +260,28 @@ class MazeEnv(gym.Env):
         # Set current position
         # Come after painting goal positions, avoid invisible within multi-goal regions
         pos = np.array(self.state[0:2], dtype=int)
-        obs[pos[0],pos[1]] = 2  # 2: agent
         if len(self.state) > 2:
-            # draw the cell in front of the agent
-            front = np.array((np.cos(self.state[2]), np.sin(self.state[2])))
-            front = (pos + 1.3 * front).astype(int)
-            obs[front[0],front[1]] = 4  # 4: food
+            # draw the cells in front of the agent
+            steps = np.arange(0.5, 6, 0.7)
+            front = np.array([
+                steps * np.cos(self.state[2]), steps * np.sin(self.state[2])
+            ])
+
+            front = (np.expand_dims(pos, axis=1) + front).astype(int)
+            # filter out elements out of range
+            front = np.array(list(filter(
+                lambda (x,y): 0<=x<self.maze.shape[0] and 0<=y<self.maze.shape[1],
+                front.T
+            ))).T
+
+            obs[front[0],front[1]] = 4
+        obs[pos[0],pos[1]] = 2  # 2: agent
 
         return obs
+
+    def _get_state_obs(self):
+        norm_state = self.state / np.array(self.maze.shape + (1.,))
+        return norm_state
 
     def _get_distance_obs(self):
         # intersect ray with closest wall
