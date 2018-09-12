@@ -19,8 +19,9 @@ class MazeGenerator(object):
         # Sample indices for initial state and goal state
         init_idx, goal_idx = np.random.choice(len(free_space), size=2, replace=False)
 
+        init_orientation = np.random.rand() * 2. * np.pi
         # Convert initial state to a list, goal states to list of list
-        init_state = list(free_space[init_idx])
+        init_state = list(free_space[init_idx]) + [init_orientation]
         goal_states = [list(free_space[goal_idx])]  # TODO: multiple goals
 
         return init_state, goal_states
@@ -113,7 +114,7 @@ class RandomBlockMazeGenerator(MazeGenerator):
 
 class UMazeGenerator(MazeGenerator):
     def __init__(self, len_long_corridor, len_short_corridor, width, wall_size=1):
-        super().__init__()
+        super(UMazeGenerator, self).__init__()
 
         self.len_long_corridor = len_long_corridor
         self.len_short_corridor = len_short_corridor
@@ -137,7 +138,7 @@ class UMazeGenerator(MazeGenerator):
 
 class TMazeGenerator(MazeGenerator):
     def __init__(self, num_T, T_size, block_size):
-        super().__init__()
+        super(TMazeGenerator, self).__init__()
 
         if num_T%2 == 0:
             raise ValueError('Number of T shape must be odd number, to avoid overlapping of reflected T.')
@@ -267,7 +268,8 @@ class TMazeGenerator(MazeGenerator):
 
         # Find the global indices for initial and goal position
         idx_init = np.where(self.maze == 2)
-        init_state = [idx_init[0][0], idx_init[1][0]]
+        init_orientation = np.random.rand() * 2. * np.pi
+        init_state = [idx_init[0][0], idx_init[1][0]] + [init_orientation]
         idx_goal = np.where(self.maze == 3)
         goal_states = [idx_goal[0][0], idx_goal[1][0]]
         goal_states = [goal_states]  # TODO: multiple goals
@@ -308,9 +310,9 @@ class WaterMazeGenerator(MazeGenerator):
 
         # Sample indices for initial state
         init_idx = np.random.choice(len(free_space), size=1)[0]
-
+        init_orientation = np.random.rand() * 2. * np.pi
         # Convert initial state to a list, goal states to list of list
-        init_state = list(free_space[init_idx])
+        init_state = list(free_space[init_idx]) + [init_orientation]
 
         # Goal states are the states within platform
         goal_states = list(zip(*np.where(self.platform == 3)))

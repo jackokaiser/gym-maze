@@ -54,7 +54,6 @@ class MazeEnv(gym.Env):
             self.action_space = spaces.Discrete(self.num_actions)
             self.all_actions = list(range(self.action_space.n))
         elif action_type.startswith('Continuous'):
-            self.init_state.append(0.) # orientation
             self.num_actions = 2
             self.action_space = spaces.Box(low=-1., high=1., shape=(2,))
             self.all_actions = [[-1, -1], [-1, 0], [-1, 1],
@@ -125,9 +124,11 @@ class MazeEnv(gym.Env):
 
         return [seed]
 
-    def reset(self):
+    def reset(self, random_setup=True):
         # Reset maze
         self.maze = np.array(self.maze_generator.get_maze())
+        if random_setup:
+            self.init_state, self.goal_states = self.maze_generator.sample_state()
 
         # Set current state be initial state
         self.state = self.init_state
@@ -230,7 +231,10 @@ class MazeEnv(gym.Env):
                 delta_t * (wheel_radius / robot_width) * angle
             ]
             new_state = [state[0] + move[0], state[1] + move[1], state[2] + move[2]]
-
+        elif self.action_type == 'Continuous-vector':
+            # we disregard the heading, just apply the translation vector
+            move = action
+            new_state = [state[0] + move[0], state[1] + move[1], state[2]]
 
         if (not 0 <= int(new_state[0]) < self.maze.shape[0]) or (not 0 <= int(new_state[1]) < self.maze.shape[1]) or (self.maze[int(new_state[0])][int(new_state[1])] == 1):  # Hit wall, stay there
             if len(state) > 2:
@@ -260,7 +264,7 @@ class MazeEnv(gym.Env):
         # Set current position
         # Come after painting goal positions, avoid invisible within multi-goal regions
         pos = np.array(self.state[0:2], dtype=int)
-        if len(self.state) > 2:
+        if len(self.state) > 2 and self.action_type != 'Continuous-vector':
             # draw the cells in front of the agent
             steps = np.arange(0.5, 6, 0.7)
             front = np.array([
