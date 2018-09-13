@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib import colors
+from skimage.draw import circle, line
 
 import gym
 from gym import spaces
@@ -265,22 +266,19 @@ class MazeEnv(gym.Env):
         # Come after painting goal positions, avoid invisible within multi-goal regions
         pos = np.array(self.state[0:2], dtype=int)
         if len(self.state) > 2 and self.action_type != 'Continuous-vector':
-            # draw the cells in front of the agent
-            steps = np.arange(0.5, 6, 0.7)
-            front = np.array([
-                steps * np.cos(self.state[2]), steps * np.sin(self.state[2])
-            ])
-
-            front = (np.expand_dims(pos, axis=1) + front).astype(int)
-            # filter out elements out of range
-            front = np.array(list(filter(
+            forward = [
+                int(self.state[0] + 20. * np.cos(self.state[2])),
+                int(self.state[1] + 20 * np.sin(self.state[2]))
+            ]
+            forward_pixels = np.array(line(pos[0],pos[1],forward[0],forward[1]))
+            # filter out pixels out of range
+            forward_pixels = np.array(list(filter(
                 lambda (x,y): 0<=x<self.maze.shape[0] and 0<=y<self.maze.shape[1],
-                front.T
+                forward_pixels.T
             ))).T
+            obs[tuple(forward_pixels)] = 4
 
-            obs[front[0],front[1]] = 4
-        obs[pos[0],pos[1]] = 2  # 2: agent
-
+        obs[circle(pos[0], pos[1], radius=5, shape=obs.shape)] = 2
         return obs
 
     def _get_state_obs(self):
