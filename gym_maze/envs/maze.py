@@ -23,7 +23,8 @@ class MazeEnv(gym.Env):
                  action_type='VonNeumann',
                  obs_type='full',
                  live_display=False,
-                 render_trace=False):
+                 render_trace=False,
+                 title=""):
         """Initialize the maze. DType: list"""
         # Random seed with internal gym seeding
         self.seed()
@@ -35,6 +36,7 @@ class MazeEnv(gym.Env):
         self.init_state, self.goal_states = self.maze_generator.sample_state()
 
         self.render_trace = render_trace
+        self.title = title
         self.traces = []
         self.action_type = action_type
         self.obs_type = obs_type
@@ -155,24 +157,26 @@ class MazeEnv(gym.Env):
 
         # Create Figure for rendering
         if not hasattr(self, 'fig'):  # initialize figure and plotting axes
-            self.fig, (self.ax_full, self.ax_partial) = plt.subplots(nrows=1, ncols=2)
+            self.fig, self.ax_full = plt.subplots(nrows=1, ncols=1)
+            # self.fig, (self.ax_full, self.ax_partial) = plt.subplots(nrows=1, ncols=2)
+            self.ax_full.set_title(self.title)
         self.ax_full.axis('off')
-        self.ax_partial.axis('off')
+        # self.ax_partial.axis('off')
 
         self.fig.show()
         if self.live_display:
             # Only create the image the first time
             if not hasattr(self, 'ax_full_img'):
                 self.ax_full_img = self.ax_full.imshow(obs, cmap=self.cmap, norm=self.norm, animated=True)
-            if not hasattr(self, 'ax_partial_img'):
-                self.ax_partial_img = self.ax_partial.imshow(partial_obs, cmap=self.cmap, norm=self.norm, animated=True)
+            # if not hasattr(self, 'ax_partial_img'):
+            #     self.ax_partial_img = self.ax_partial.imshow(partial_obs, cmap=self.cmap, norm=self.norm, animated=True)
             # Update the image data for efficient live video
             self.ax_full_img.set_data(obs)
-            self.ax_partial_img.set_data(partial_obs)
+            # self.ax_partial_img.set_data(partial_obs)
         else:
             # Create a new image each time to allow an animation to be created
             self.ax_full_img = self.ax_full.imshow(obs, cmap=self.cmap, norm=self.norm, animated=True)
-            self.ax_partial_img = self.ax_partial.imshow(partial_obs, cmap=self.cmap, norm=self.norm, animated=True)
+            # self.ax_partial_img = self.ax_partial.imshow(partial_obs, cmap=self.cmap, norm=self.norm, animated=True)
 
         plt.draw()
 
@@ -181,7 +185,8 @@ class MazeEnv(gym.Env):
             self.fig.canvas.draw()
         else:
             # Put in AxesImage buffer for video generation
-            self.ax_imgs.append([self.ax_full_img, self.ax_partial_img])  # List of axes to update figure frame
+            self.ax_imgs.append(self.ax_full_img)  # List of axes to update figure frame
+            # self.ax_imgs.append([self.ax_full_img, self.ax_partial_img])  # List of axes to update figure frame
 
             self.fig.set_dpi(100)
 
@@ -267,8 +272,8 @@ class MazeEnv(gym.Env):
         pos = np.array(self.state[0:2], dtype=int)
         if len(self.state) > 2 and self.action_type != 'Continuous-vector':
             forward = [
-                int(self.state[0] + 20. * np.cos(self.state[2])),
-                int(self.state[1] + 20 * np.sin(self.state[2]))
+                int(self.state[0] + 6. * np.cos(self.state[2])),
+                int(self.state[1] + 6. * np.sin(self.state[2]))
             ]
             forward_pixels = np.array(line(pos[0],pos[1],forward[0],forward[1]))
             # filter out pixels out of range
@@ -278,7 +283,7 @@ class MazeEnv(gym.Env):
             ))).T
             obs[tuple(forward_pixels)] = 4
 
-        obs[circle(pos[0], pos[1], radius=5, shape=obs.shape)] = 2
+        obs[circle(pos[0], pos[1], radius=1, shape=obs.shape)] = 2
         return obs
 
     def _get_state_obs(self):
