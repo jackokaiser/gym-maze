@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib import colors
 from skimage.draw import circle, line
-
+from sklearn.metrics.pairwise import euclidean_distances
 import gym
 from gym import spaces
 from gym.utils import seeding
@@ -22,6 +22,7 @@ class MazeEnv(gym.Env):
                  pob_size=1,
                  action_type='VonNeumann',
                  obs_type='full',
+                 reward_type='discrete',
                  live_display=False,
                  render_trace=False,
                  title=""):
@@ -40,6 +41,7 @@ class MazeEnv(gym.Env):
         self.traces = []
         self.action_type = action_type
         self.obs_type = obs_type
+        self.reward_type = reward_type
 
         # If True, show the updated display each time render is called rather
         # than storing the frames and creating an animation at the end
@@ -102,20 +104,24 @@ class MazeEnv(gym.Env):
     def step(self, action):
         old_state = self.state
         # Update current state
-        self.state = self._next_state(self.state, action)
+        self.state, hit_wall = self._next_state(self.state, action)
 
         # Footprint: Record agent trajectory
         self.traces.append(discretize(self.state[0:2]))
 
-        if self._goal_test(discretize(self.state[0:2])):  # Goal check
-            reward = +10
-            done = True
-        elif self.state[:2] == old_state[:2]:  # Hit wall
-            reward = -1
-            done = False
-        else:  # Moved, small negative reward to encourage shorest path
-            reward = -0.01
-            done = False
+        done = False
+        if self.reward_type == 'discrete':
+            if self._goal_test(discretize(self.state[0:2])):  # Goal check
+                reward = +10
+                done = True
+            elif hit_wall:  # Hit wall
+                reward = -1
+            else:  # Moved, small negative reward to encourage shorest path
+                reward = -0.01
+        if self.reward_type == 'distance':
+            if self._goal_test(discretize(self.state[0:2])):  # Goal chekc
+                done = True
+            reward = - euclidean_distances([discretize(self.state[0:2])], [self.goal_states[0]])[0,0] / 3000.
 
         # Additional info
         info = {}
@@ -246,9 +252,9 @@ class MazeEnv(gym.Env):
             if len(state) > 2:
                 # apply rotation still
                 state[2] = new_state[2]
-            return state
+            return (state, True)
         else:
-            return new_state
+            return (new_state, False)
 
     def _get_obs(self):
         if self.obs_type == 'full':
