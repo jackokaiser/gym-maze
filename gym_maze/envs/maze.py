@@ -48,6 +48,8 @@ class MazeEnv(gym.Env):
         self.live_display = live_display
 
         self.state = None
+        self.scale = self.maze.shape[0] / 20.
+        self.speed = 1.
 
         # Action space: 0: Up, 1: Down, 2: Left, 3: Right
         if self.action_type == 'VonNeumann':  # Von Neumann neighborhood
@@ -81,10 +83,10 @@ class MazeEnv(gym.Env):
             self.observation_space = spaces.Box(low=low_obs,
                                                 high=high_obs,
                                                 shape=(self.pob_size*2+1, self.pob_size*2+1))
-        elif self.obs_type == 'distance':
+        elif self.obs_type == 'laser':
             self.observation_space = spaces.Box(low=0.,
-                                                high=20.,
-                                                shape=(1))
+                                                high=self.maze_size,
+                                                shape=(3))
         elif self.obs_type == 'state':
             self.observation_space = spaces.Box(low=0.,
                                                 high=1.,
@@ -227,11 +229,11 @@ class MazeEnv(gym.Env):
                 action[0] * np.sin(self.state[2]),
                 action[1] * 0.1
             ]
-            new_state = [state[0] + move[0], state[1] + move[1], state[2] + move[2]]
+            new_state = [state[0] + self.speed * self.scale * move[0], state[1] + self.speed * self.scale * move[1], state[2] + move[2]]
 
         elif self.action_type == 'Continuous-diff':
             # differential drive with approximately pushbot dimension
-            gridworld_scale = 2000. # distance between adjacent pixels
+            gridworld_scale = self.speed * self.scale * 2000. # distance between adjacent pixels
             delta_t = 0.03
             wheel_radius = 0.02
             robot_width = 0.05
@@ -246,7 +248,7 @@ class MazeEnv(gym.Env):
         elif self.action_type == 'Continuous-vector':
             # we disregard the heading, just apply the translation vector
             move = action
-            new_state = [state[0] + move[0], state[1] + move[1], state[2]]
+            new_state = [state[0] + self.speed * self.scale * move[0], state[1] + self.speed * self.scale * move[1], state[2]]
 
         if (not 0 <= int(new_state[0]) < self.maze.shape[0]) or (not 0 <= int(new_state[1]) < self.maze.shape[1]) or (self.maze[int(new_state[0])][int(new_state[1])] == 1):  # Hit wall, stay there
             if len(state) > 2:
@@ -261,8 +263,8 @@ class MazeEnv(gym.Env):
             return self._get_full_obs()
         elif self.obs_type == 'partial':
             return self._get_partial_obs(self.pob_size)
-        elif self.obs_type == 'distance':
-            return self._get_distance_obs()
+        elif self.obs_type == 'laser':
+            return self._get_laser_obs()
         elif self.obs_type == 'state':
             return self._get_state_obs()
 
@@ -276,30 +278,39 @@ class MazeEnv(gym.Env):
         # Set current position
         # Come after painting goal positions, avoid invisible within multi-goal regions
         pos = np.array(self.state[0:2], dtype=int)
+        obs[circle(pos[0], pos[1], radius=self.scale, shape=obs.shape)] = 2
+
         if len(self.state) > 2 and self.action_type != 'Continuous-vector':
             forward = [
-                int(self.state[0] + 6. * np.cos(self.state[2])),
-                int(self.state[1] + 6. * np.sin(self.state[2]))
+                int(self.state[0] + self.scale * np.cos(self.state[2])),
+                int(self.state[1] + self.scale * np.sin(self.state[2]))
             ]
-            forward_pixels = np.array(line(pos[0],pos[1],forward[0],forward[1]))
+            # forward_pixels = np.array(line(pos[0],pos[1],forward[0],forward[1]))
             # filter out pixels out of range
-            forward_pixels = np.array(list(filter(
-                lambda (x,y): 0<=x<self.maze.shape[0] and 0<=y<self.maze.shape[1],
-                forward_pixels.T
-            ))).T
-            obs[tuple(forward_pixels)] = 4
+            # forward_pixels = np.array(list(filter(
+            #     lambda (x,y): 0<=x<self.maze.shape[0] and 0<=y<self.maze.shape[1],
+            #     forward_pixels.T
+            # ))).T
+            # obs[tuple(forward_pixels)] = 4
+            forward_pixels = circle(forward[0], forward[1], radius=self.scale / 1.5, shape=obs.shape )
+            obs[forward_pixels] = 4
 
-        obs[circle(pos[0], pos[1], radius=1, shape=obs.shape)] = 2
         return obs
 
     def _get_state_obs(self):
         norm_state = self.state / np.array(self.maze.shape + (1.,))
         return norm_state
 
-    def _get_distance_obs(self):
-        # intersect ray with closest wall
-        maze = self._get_full_obs()
-        return [0.]
+    def _get_laser_obs(self, maze):
+        # intersect 3 rays with closest wall
+        rays_angles = self.state[2] + np.array([-0.2, 0, 0.2])
+        rays_forward = [
+            [[int(self.state[0] + 6. * np.cos(a))],
+             [int(self.state[1] + 6. * np.sin(a))]]
+            for a in rays_angles
+        ]
+
+        return [0.], laser_maze
 
     def _get_partial_obs(self, size=1):
         """Get partial observable window according to Moore neighborhood"""
