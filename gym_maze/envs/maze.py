@@ -137,6 +137,7 @@ class MazeEnv(gym.Env):
 
     def reset(self, random_setup=True):
         # Reset maze
+        self.maze_generator.reset()
         self.maze = np.array(self.maze_generator.get_maze())
         if random_setup:
             self.init_state, self.goal_states = self.maze_generator.sample_state()

@@ -28,7 +28,8 @@ class MazeGenerator(object):
 
     def get_maze(self):
         return self.maze
-
+    def reset(self):
+        pass
 
 class SimpleMazeGenerator(MazeGenerator):
     def __init__(self, maze):
@@ -288,6 +289,9 @@ class WaterMazeGenerator(MazeGenerator):
         self.radius_maze = radius_maze
         self.radius_platform = radius_platform
 
+        self.reset()
+
+    def reset(self):
         # Generate free space for water maze
         self.maze = np.ones([2*self.radius_maze, 2*self.radius_maze])
         self.maze[circle(self.radius_maze, self.radius_maze, self.radius_maze - 1)] = 0
