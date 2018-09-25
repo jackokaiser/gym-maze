@@ -29,6 +29,7 @@ class MazeGenerator(object):
     def get_maze(self):
         return self.maze
     def reset(self):
+        print("Maze reset not implemented!")
         pass
 
 class SimpleMazeGenerator(MazeGenerator):
@@ -289,9 +290,9 @@ class WaterMazeGenerator(MazeGenerator):
         self.radius_maze = radius_maze
         self.radius_platform = radius_platform
 
-        self.reset()
+        self.reset([self.radius_maze, self.radius_maze])
 
-    def reset(self):
+    def reset(self, coord_platform=None):
         # Generate free space for water maze
         self.maze = np.ones([2*self.radius_maze, 2*self.radius_maze])
         self.maze[circle(self.radius_maze, self.radius_maze, self.radius_maze - 1)] = 0
@@ -300,7 +301,8 @@ class WaterMazeGenerator(MazeGenerator):
         self.platform = np.zeros_like(self.maze)
         radius_diff = self.radius_maze - self.radius_platform - 1
         valid_x, valid_y = circle(self.radius_maze, self.radius_maze, radius_diff)
-        coord_platform = np.stack([valid_x, valid_y], axis=1)[np.random.choice(range(valid_x.shape[0]))]
+        if coord_platform is None:
+            coord_platform = np.stack([valid_x, valid_y], axis=1)[np.random.choice(range(valid_x.shape[0]))]
         self.platform[circle(*coord_platform, radius=self.radius_platform)] = 3
 
         # Add platform to the maze array

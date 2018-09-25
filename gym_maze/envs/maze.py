@@ -25,6 +25,7 @@ class MazeEnv(gym.Env):
                  reward_type='discrete',
                  live_display=False,
                  render_trace=False,
+                 random_state=True, random_maze=True,
                  title=""):
         """Initialize the maze. DType: list"""
         # Random seed with internal gym seeding
@@ -42,6 +43,9 @@ class MazeEnv(gym.Env):
         self.action_type = action_type
         self.obs_type = obs_type
         self.reward_type = reward_type
+
+        self.random_state_reset = random_state
+        self.random_maze_reset = random_maze
 
         # If True, show the updated display each time render is called rather
         # than storing the frames and creating an animation at the end
@@ -88,9 +92,9 @@ class MazeEnv(gym.Env):
                                                 high=self.maze_size,
                                                 shape=(3))
         elif self.obs_type == 'state':
-            self.observation_space = spaces.Box(low=0.,
+            self.observation_space = spaces.Box(low=-1.,
                                                 high=1.,
-                                                shape=(3))
+                                                shape=(4))
 
         else:
             raise TypeError('Observation type must be either \'full\' or \'partial\'')
@@ -117,17 +121,17 @@ class MazeEnv(gym.Env):
                 reward = +10
                 done = True
             elif hit_wall:  # Hit wall
-                reward = -1
+                reward = -0.1
             else:  # Moved, small negative reward to encourage shorest path
                 reward = -0.01
-        if self.reward_type == 'distance':
+        elif self.reward_type == 'distance':
+            reward = - euclidean_distances([discretize(self.state[0:2])], [self.goal_states[0]])[0,0] / 3000.
             if self._goal_test(discretize(self.state[0:2])):  # Goal chekc
                 done = True
-            reward = - euclidean_distances([discretize(self.state[0:2])], [self.goal_states[0]])[0,0] / 3000.
+                reward += 10
 
         # Additional info
         info = {}
-
         return self._get_obs(), reward, done, info
 
     def seed(self, seed=None):
@@ -135,11 +139,12 @@ class MazeEnv(gym.Env):
 
         return [seed]
 
-    def reset(self, random_setup=True):
+    def reset(self):
         # Reset maze
-        self.maze_generator.reset()
+        if self.random_maze_reset:
+            self.maze_generator.reset()
         self.maze = np.array(self.maze_generator.get_maze())
-        if random_setup:
+        if self.random_state_reset:
             self.init_state, self.goal_states = self.maze_generator.sample_state()
 
         # Set current state be initial state
@@ -251,13 +256,14 @@ class MazeEnv(gym.Env):
             move = action
             new_state = [state[0] + self.speed * self.scale * move[0], state[1] + self.speed * self.scale * move[1], state[2]]
 
-        if (not 0 <= int(new_state[0]) < self.maze.shape[0]) or (not 0 <= int(new_state[1]) < self.maze.shape[1]) or (self.maze[int(new_state[0])][int(new_state[1])] == 1):  # Hit wall, stay there
+        hit_wall = not ((0 <= int(new_state[0]) < self.maze.shape[0]) and (0 <= int(new_state[1]) < self.maze.shape[1]) and (not self.maze[int(new_state[0])][int(new_state[1])] == 1))
+        if hit_wall:
+            next_state = state
             if len(state) > 2:
-                # apply rotation still
-                state[2] = new_state[2]
-            return (state, True)
+                next_state[2] = new_state[2]
         else:
-            return (new_state, False)
+            next_state = new_state
+        return (np.array(next_state, dtype=np.float32), hit_wall)
 
     def _get_obs(self):
         if self.obs_type == 'full':
@@ -283,8 +289,8 @@ class MazeEnv(gym.Env):
 
         if len(self.state) > 2 and self.action_type != 'Continuous-vector':
             forward = [
-                int(self.state[0] + self.scale * np.cos(self.state[2])),
-                int(self.state[1] + self.scale * np.sin(self.state[2]))
+                int(self.state[0] + 1.3 * self.scale * np.cos(self.state[2])),
+                int(self.state[1] + 1.3 * self.scale * np.sin(self.state[2]))
             ]
             # forward_pixels = np.array(line(pos[0],pos[1],forward[0],forward[1]))
             # filter out pixels out of range
@@ -294,12 +300,17 @@ class MazeEnv(gym.Env):
             # ))).T
             # obs[tuple(forward_pixels)] = 4
             forward_pixels = circle(forward[0], forward[1], radius=self.scale / 1.5, shape=obs.shape )
-            obs[forward_pixels] = 4
+            obs[forward_pixels] = 6
 
         return obs
 
     def _get_state_obs(self):
-        norm_state = self.state / np.array(self.maze.shape + (1.,))
+        norm_state = np.array([
+            self.state[0] / self.maze.shape[0],
+            self.state[1] / self.maze.shape[1],
+            np.cos(self.state[2]),
+            np.sin(self.state[2])
+        ])
         return norm_state
 
     def _get_laser_obs(self, maze):
