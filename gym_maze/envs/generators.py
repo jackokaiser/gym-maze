@@ -302,11 +302,21 @@ class WaterMazeGenerator(MazeGenerator):
         radius_diff = self.radius_maze - self.radius_platform - 1
         valid_x, valid_y = circle(self.radius_maze, self.radius_maze, radius_diff)
         if coord_platform is None:
+            # possibilities = [[10, self.radius_maze + 20], [self.radius_maze - 10, self.radius_maze - 20]]
+            # coord_platform = np.random.choice(possibilities)
             coord_platform = np.stack([valid_x, valid_y], axis=1)[np.random.choice(range(valid_x.shape[0]))]
         self.platform[circle(*coord_platform, radius=self.radius_platform)] = 3
+        self.coord_platform = coord_platform
 
         # Add platform to the maze array
         self.maze += self.platform
+
+        return self.get_goal()
+
+    def get_goal(self):
+        # Goal states are the states within platform
+        goal_states = list(zip(*np.where(self.platform == 3)))
+        return goal_states
 
     def sample_state(self):
         """Randomly sample an initial state and goal state within the platform"""
@@ -320,7 +330,4 @@ class WaterMazeGenerator(MazeGenerator):
         # Convert initial state to a list, goal states to list of list
         init_state = list(free_space[init_idx]) + [init_orientation]
 
-        # Goal states are the states within platform
-        goal_states = list(zip(*np.where(self.platform == 3)))
-
-        return init_state, goal_states
+        return init_state

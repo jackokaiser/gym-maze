@@ -26,7 +26,9 @@ class MazeEnv(gym.Env):
                  live_display=False,
                  render_trace=False,
                  random_state=True, random_maze=True,
-                 title=""):
+                 title="",
+                 representation_shape = (4,4)
+    ):
         """Initialize the maze. DType: list"""
         # Random seed with internal gym seeding
         self.seed()
@@ -35,10 +37,12 @@ class MazeEnv(gym.Env):
         self.maze_generator = maze_generator
         self.maze = np.array(self.maze_generator.get_maze())
         self.maze_size = self.maze.shape
-        self.init_state, self.goal_states = self.maze_generator.sample_state()
+        self.init_state = self.maze_generator.sample_state()
+        self.goal_states = self.maze_generator.get_goal()
 
         self.render_trace = render_trace
         self.title = title
+        self.representation_shape = representation_shape
         self.traces = []
         self.action_type = action_type
         self.obs_type = obs_type
@@ -94,7 +98,7 @@ class MazeEnv(gym.Env):
         elif self.obs_type == 'state':
             self.observation_space = spaces.Box(low=-1.,
                                                 high=1.,
-                                                shape=(4))
+                                                shape=(6))
 
         else:
             raise TypeError('Observation type must be either \'full\' or \'partial\'')
@@ -142,10 +146,11 @@ class MazeEnv(gym.Env):
     def reset(self):
         # Reset maze
         if self.random_maze_reset:
-            self.maze_generator.reset()
-        self.maze = np.array(self.maze_generator.get_maze())
+            self.goal_states = self.maze_generator.reset()
         if self.random_state_reset:
-            self.init_state, self.goal_states = self.maze_generator.sample_state()
+            self.init_state = self.maze_generator.sample_state()
+
+        self.maze = np.array(self.maze_generator.get_maze())
 
         # Set current state be initial state
         self.state = self.init_state
@@ -309,9 +314,21 @@ class MazeEnv(gym.Env):
             self.state[0] / self.maze.shape[0],
             self.state[1] / self.maze.shape[1],
             np.cos(self.state[2]),
-            np.sin(self.state[2])
+            np.sin(self.state[2]),
+            float(self.maze_generator.coord_platform[0]) / self.maze.shape[0],
+            float(self.maze_generator.coord_platform[1]) / self.maze.shape[1]
         ])
         return norm_state
+
+    def get_state_representation(self):
+        # grid cell encoding of the position
+        place_cells = np.zeros(self.representation_shape)
+        current_grid_position = np.array(self.state[:2]) / self.maze.shape * self.representation_shape - 0.0001
+        place_cells[tuple(np.floor(current_grid_position).astype(int))] = 1.
+        return place_cells
+
+    def get_state_representation_size(self):
+        return np.prod(self.representation_shape)
 
     def _get_laser_obs(self, maze):
         # intersect 3 rays with closest wall
@@ -349,6 +366,7 @@ class MazeEnv(gym.Env):
         if gif_path is not None:
             anim.save(gif_path, writer='imagemagick', fps=10)
         return anim
+
 
 
 class SparseMazeEnv(MazeEnv):
